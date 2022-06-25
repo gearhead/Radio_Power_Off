@@ -1,7 +1,7 @@
- /*
+/*
  * Program to control relay to mimic GM "Retained Accessory Power"
  * http://www.the12volt.com/relays/relaydiagram30.html
- * using Digispark Pro http://digistump.com/wiki/digispark/tutorials/connecting
+ * using Digispark http://digistump.com/wiki/digispark/tutorials/connecting
  * attiny85 based device with 5v regulator
  * power on and assume that the radio can stay on
  * when pin is grounded, the processor resets and shuts down. 
@@ -10,25 +10,28 @@
  * 30k resistor and 5.6v zener on door and run pins
  * 1n4001 from +15 to radio lead
  * red +30, yellow +15, blue radio, black gnd 
- * Pin 5 acts as reset, so when this grounds, it powers off.
- * Moved door pin to pin 3
+ * pins 3 and 4 are used for USB and have 3v6 zeners and resistors so their thresholds are
+ * not good for triggering. Ensure the relay is on 4 and the pb0 and pb1 pins are used for triggers
  * 
- * Made a schematic and added a lot of components to protest both the car and the tiny
+ * Made a schematic and added a lot of components to protect both the car and the tiny
  * 
- * pcint set for ignition off. When switched off, switch the pin to the door and await the 
+ * pcint set waiting for ignition off. When switched off, switch the pin to the door and await the 
  * pin going low to turn off or the timer to expire. 
  * 
  * For some reason digispark will not register hi to low on pin 4
  * 
  * rev 4 worked but relied on reset and polling...
  * rev 5 re-write to use pcint and to make it work -- had to move door to pin 3 from 4
+ * rev 6 simplify if statements add delay/debounce to interrupt, add checks to ign state
  */
  
 // code to turn off radio when door is opened or after 15 min
-#define relayPin 0 // output to relay
+#define ignPin 0   // igniton on = HIGH waiting for LOW
 #define ledPin 1   // on board led high to turn on
-#define ignPin 2   // igniton on = HIGH
-#define doorPin 3  // gnd will shut it down
+#define doorPin 2  // HIGH waiting for LOW
+#define relayPin 4 // output to relay low to turn on
+
+const unsigned long debounce = 100;  // ms debounce on interrupt pins
 
 unsigned long currentMillis;
 unsigned long previousMillis;
@@ -37,47 +40,51 @@ unsigned long offDelay = 900000; // 900000 is 15 min
 unsigned long offTime;           // calculated time 15 min after power off
 bool ledState = LOW;             // start blink off
 bool ignState = HIGH;            // assume ign ON as power up causes it to go on
-bool doorState = HIGH;           // waiting for a gnd
-volatile bool intSignal = HIGH;  // powered up and waiting for a turn off
+volatile bool intSignal = HIGH;  // powered up and waiting for a turn off - LOW
+// interrupt debounce vars
+volatile unsigned long last_interrupt_time;
+volatile unsigned long interrupt_time;
 
 void setup() { 
-  // initialize the digital pin as an output.
-  pinMode(doorPin,INPUT);  // high when running
+  // initialize the pins
   pinMode(ignPin, INPUT);  // high when running (15) - this needs a pull down
+  ignState = digitalRead(ignPin);  // this must be HIGH as it is powered on by this pin
+  pinMode(doorPin,INPUT);  // high when running - needs pull down/
+  // do not read door Pin as door may be open then closed as car is started assume HIGH
   pinMode(relayPin, OUTPUT); // LOW to turn on relay
   digitalWrite(relayPin, LOW);  // turn on relay at power up
   pinMode(ledPin, OUTPUT); //LED on DigiSpark board, HIGH to turn on
-  digitalWrite(ledPin, HIGH); // turn on LED
-
+  // set up PCINT
   cli();
-  PCMSK = 0b00000100;    // turn on PCINT interrupt on pin PB2 - wait for ign off 
+  // set PCINT0_vect to be triggered by the ignition pin first 
+  PCMSK |= (1 << ignPin);
   GIMSK = 0b00100000;    // turns on pin change interrupts
   sei();
 }
 
 void loop() {
   currentMillis = millis();
-  if (!intSignal && ignState) {  // we turned ign off
-    // start timer
-    offTime = currentMillis + offDelay;  // set turn off time
-    ignState = LOW;                      // ign flag off
-    interval = 250;                      // blink led faster after ign off
-    cli();
-    PCMSK = 0b00001000;    // trigger PCINT0_vect on pin PB3 - waiting for door 
-    sei();
-    intSignal = HIGH;      // set back to HIGH for door interrupt
+  if (ignState && !intSignal) {  // interrupt triggered: turned ign off
+    if (!digitalRead(ignPin)) {   // make sure it is actually off before we switch triggers
+      // start timer
+      offTime = currentMillis + offDelay;  // set turn off time
+      ignState = LOW;                      // ign flag off
+      interval = interval >> 1;            // blink led faster after ign off
+      cli();
+      PCMSK |= (1 << doorPin); // trigger PCINT0_vect on doorPin - wait for door 
+      sei();
+      intSignal = HIGH;      // set trigger flag back to HIGH for door interrupt
+    }
   }
 
-  if (!ignState && currentMillis >= offTime) { // ign off and timer expired
-    interval = 100;                             // blink even faster
-    digitalWrite(relayPin, HIGH);               // turn off relay - powers it all down
+  if (!ignState) {                                // ign off
+    if(!intSignal || currentMillis >= offTime) { // door pin gnd or timer expired
+      interval = 100;                              // blink even faster testing display
+      digitalWrite(relayPin, HIGH);                // turn off relay - powers it all down
+    }
   }
 
-  if (!ignState && !intSignal) {               // ign off waiting for a door 
-    digitalWrite(relayPin, HIGH);               // turn off relay - powers it all down
-  }
-
-  if (currentMillis - previousMillis >= interval) { // led blinking
+  if (currentMillis - previousMillis >= interval) { // blink the LED
     // save the last time the LED blinked
     previousMillis = currentMillis;
     ledState = !ledState;
@@ -89,5 +96,10 @@ void loop() {
  * Command: interrupt handler
  */
 ISR(PCINT0_vect) {
-  intSignal = LOW;
+  interrupt_time = currentMillis;
+  // If interrupts come faster than debounce ms, assume it's a bounce and ignore
+  if (interrupt_time - last_interrupt_time > debounce) {
+    intSignal = LOW; // interrupt pin changes state - LOW
+  }
+  last_interrupt_time = interrupt_time;
 }
