@@ -23,13 +23,14 @@
  * rev 4 worked but relied on reset and polling...
  * rev 5 re-write to use pcint and to make it work -- had to move door to pin 3 from 4
  * rev 6 simplify if statements add delay/debounce to interrupt, add checks to ign state
+ * rev 7 add transistor to turn on relay. voltage droop is enough to drop out
  */
  
 // code to turn off radio when door is opened or after 15 min
 #define ignPin 0   // igniton on = HIGH waiting for LOW
 #define ledPin 1   // on board led high to turn on
 #define doorPin 2  // HIGH waiting for LOW
-#define relayPin 4 // output to relay low to turn on
+#define relayPin 4 // output to relay HIGH to turn on
 
 const unsigned long debounce = 100;  // ms debounce on interrupt pins
 
@@ -52,7 +53,7 @@ void setup() {
   pinMode(doorPin,INPUT);  // high when running - needs pull down/
   // do not read door Pin as door may be open then closed as car is started assume HIGH
   pinMode(relayPin, OUTPUT); // LOW to turn on relay
-  digitalWrite(relayPin, LOW);  // turn on relay at power up
+  digitalWrite(relayPin, HIGH);  // turn on relay at power up
   pinMode(ledPin, OUTPUT); //LED on DigiSpark board, HIGH to turn on
   // set up PCINT
   cli();
@@ -66,21 +67,21 @@ void loop() {
   currentMillis = millis();
   if (ignState && !intSignal) {  // interrupt triggered: turned ign off
     if (!digitalRead(ignPin)) {   // make sure it is actually off before we switch triggers
-      // start timer
-      offTime = currentMillis + offDelay;  // set turn off time
-      ignState = LOW;                      // ign flag off
-      interval = interval >> 1;            // blink led faster after ign off
-      cli();
-      PCMSK |= (1 << doorPin); // trigger PCINT0_vect on doorPin - wait for door 
-      sei();
-      intSignal = HIGH;      // set trigger flag back to HIGH for door interrupt
+    // start timer
+    offTime = currentMillis + offDelay;  // set turn off time
+    ignState = LOW;                      // ign flag off
+    interval = interval >> 1;            // blink led faster after ign off
+    cli();
+    PCMSK |= (1 << doorPin); // trigger PCINT0_vect on doorPin - wait for door 
+    sei();
+    intSignal = HIGH;      // set trigger flag back to HIGH for door interrupt
     }
   }
 
   if (!ignState) {                                // ign off
     if(!intSignal || currentMillis >= offTime) { // door pin gnd or timer expired
       interval = 100;                              // blink even faster testing display
-      digitalWrite(relayPin, HIGH);                // turn off relay - powers it all down
+      digitalWrite(relayPin, LOW);                // turn off relay - powers it all down
     }
   }
 
