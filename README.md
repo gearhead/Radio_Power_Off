@@ -12,8 +12,9 @@ Arduino/Digispark/Attiny85 code to turn off the radio with door open/15 minutes
  * 30k resistor and 5.6v zener on door and run pins
  * 1n4001 from +15 to radio lead
  * red +30, yellow +15, blue radio, black gnd 
- * pins 3 and 4 are used for USB and have 3v6 zeners and resistors so their thresholds are
- * not good for triggering. Ensure the relay is on 4 and the pb0 and pb1 pins are used for triggers
+ * Pins 3 and 4 are used for USB and have 3v6 zeners and resistors so their thresholds are
+ * not good for triggering. 
+ * Ensure the relay is on Pin 4 and the pb0 and pb1 pins are used for triggers
  * 
  * Made a schematic and added a lot of components to protect both the car and the tiny
  * 
