@@ -25,6 +25,7 @@
  * rev 6 simplify if statements add delay/debounce to interrupt, add checks to ign state
  * rev 7 add transistor to turn on relay. voltage droop is enough to drop out
  * rev 8 logic: if key off then door close it should wait 15 min then turn off - untested
+ * rev 9 turn off 15 seconds after door pin is pulled, instead of 15 minutes did not work
  */
  
 // code to turn off radio when door is opened or after 15 min
@@ -37,11 +38,12 @@ const unsigned long debounce = 100;  // ms debounce on interrupt pins
 
 unsigned long currentMillis;
 unsigned long previousMillis;
-unsigned long interval = 500;    // how often to flash led
-unsigned long offDelay = 900000; // 900000 is 15 min
+unsigned long interval = 1000;    // how often to flash led
+unsigned long offDelay = 885000; // 900000 is 15 min, this is 15 seconds short
 unsigned long offTime;           // calculated time 15 min after power off
 bool ledState = LOW;             // start blink off
 bool ignState = HIGH;            // assume ign ON as power up causes it to go on
+bool shutDown = LOW;
 volatile bool intSignal = HIGH;  // powered up and waiting for a turn off - LOW
 // interrupt debounce vars
 volatile unsigned long last_interrupt_time;
@@ -59,7 +61,7 @@ void setup() {
   // set up PCINT
   cli();
   // set PCINT0_vect to be triggered by the ignition pin first 
-  //PCMSK |= (1 << ignPin);
+  PCMSK |= (1 << ignPin);
   GIMSK = 0b00100000;    // turns on pin change interrupts: generic look for a change on all pins
   sei();
 }
@@ -77,17 +79,25 @@ void loop() {
       sei();
       intSignal = HIGH;      // set trigger flag back to HIGH for door interrupt
     }
-    else if(!digitalRead(doorPin)) { // door opened with ign on
-      if (!digitalRead(ignPin)) { // ign is still on
-       // don't do anyhthing 
-      }
+    //else if(!digitalRead(doorPin)) { // door opened with ign on
+    //  if (!digitalRead(ignPin)) { // ign is still on
+    //   // don't do anyhthing 
+    //  }
+    //}
+  }
+  if (!ignState) {                               // ign off
+    if(!intSignal || currentMillis >= offTime) { // door pin gnd or timer expired
+      interval = interval >> 1;                  // blink even faster testing display
+      shutDown = HIGH;
+      offTime = offTime + 15000;                 //turn it off in 15 more seconds..
+    }
+    if(digitalRead(ignPin)) {                     // turned ign back on
+      ignState = HIGH;
     }
   }
-  if (!ignState) {                                // ign off
-    if(!intSignal || currentMillis >= offTime) { // door pin gnd or timer expired
-      interval = 100;                              // blink even faster testing display
-      digitalWrite(relayPin, LOW);                // turn off relay - powers it all down
-    }
+
+  if (shutDown && currentMillis >= offTime) {
+    digitalWrite(relayPin, LOW);                // turn off relay - powers it all down
   }
 
   if (currentMillis - previousMillis >= interval) { // blink the LED
