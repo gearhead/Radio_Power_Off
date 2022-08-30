@@ -2,21 +2,24 @@
  * Program to control relay to mimic GM "Retained Accessory Power"
  * http://www.the12volt.com/relays/relaydiagram30.html
  * using Digispark http://digistump.com/wiki/digispark/tutorials/connecting
+ * leveraging pin change interrupts https://thewanderingengineer.com/2014/08/11/pin-change-interrupts-on-attiny85/
  * attiny85 based device with 5v regulator
  * power on and assume that the radio can stay on
  * when pin is grounded, the processor resets and shuts down. 
  * 
  * led on pin 1
- * 30k resistor and 5.6v zener on door and run pins
+ * 200 resistor and 5.6v zener on door and run pins
  * 1n4001 from +15 to radio lead
+ * 100k lullup on door pin, 100k pulldown on ign pin
+ * 2n2222 to turn on relay (switched polarity on pin 1)
  * red +30, yellow +15, blue radio, black gnd 
  * pins 3 and 4 are used for USB and have 3v6 zeners and resistors so their thresholds are
  * not good for triggering. Ensure the relay is on 4 and the pb0 and pb1 pins are used for triggers
  * 
  * Made a schematic and added a lot of components to protect both the car and the tiny
  * 
- * pcint set waiting for ignition off. When switched off, switch the pin to the door and await the 
- * pin going low to turn off or the timer to expire. 
+ * pcint set waiting for ignition off. When switched off, await the 
+ * pin going low to turn off or the timer to expire.
  * 
  * For some reason digispark will not register hi to low on pin 4
  * 
@@ -40,7 +43,7 @@ const unsigned long debounce = 100;  // ms debounce on interrupt pins
 unsigned long currentMillis;
 unsigned long previousMillis;
 unsigned long interval = 1000;    // how often to flash led
-unsigned long offDelay = 885000; // 900000 is 15 min, this is 15 seconds short
+unsigned long offDelay = 898000; // 900000 is 15 min, this is 15 seconds short
 unsigned long offTime;           // calculated time 15 min after power off
 bool ledState = LOW;             // start blink off
 bool shutDown = LOW;
@@ -72,45 +75,46 @@ void loop() {
   switch (powerState) {
     case 0: // powered on check for ign off
       if (!intSignal) {
-        if (!digitalRead(ignPin)) {   //  turned ign off. switch triggers wait for door
+        if (!digitalRead(ignPin)) {                  //  turned ign off. wait for door
         // start timer
-        offTime = currentMillis + offDelay;  // set turn off time
-        interval = interval >> 1;            // blink led faster after ign off
+        offTime = currentMillis + offDelay;          // set turn off time
+        interval = interval >> 1;                    // blink led faster after ign off
         powerState = 1;
         intSignal = HIGH;
         }
       }  
     break;
     case 1: // ign off. Check for timer or door or ign back on
-      if(!intSignal) { 
+      if(!intSignal) {                               // we got an interrupt 
         if(digitalRead(ignPin)) {                    // turned ign back on
-          powerState = 0;
+          powerState = 0;                            // reset to state 0
           interval = interval << 1;
           break;
         }
-        if(!digitalRead(doorPin)) {                  // door pin gnd
-          powerState = 2;
+        if(!digitalRead(doorPin)) {                  // we got a door pin gnd
+          powerState = 2;                            // get ready to turn off
           interval = interval >> 1;                  // blink even faster
-          offTime = currentMillis + 5000;            //turn it off in 5 more seconds
+          offTime = currentMillis + 2000;            // turn it off in 5 seconds
         }
-      intSignal = HIGH;
-      break;  
+      intSignal = HIGH;                              // reset in case state 0
+      break;
       }
-      if (currentMillis >= offTime) {
+      if (currentMillis >= offTime) {                // timer expired
           interval = interval >> 1;                  // blink even faster
           powerState = 2;
-          offTime = currentMillis + 15000;           //turn it off in 15 more seconds
+          offTime = currentMillis + 2000;    
+          //turn it off in 5 seconds
           break;
       }
     break;
-    case 2: // Power down
+    case 2:                                          // Power down
       if (currentMillis >= offTime) {
-      digitalWrite(relayPin, LOW);                // turn off relay - powers it all down
+      digitalWrite(relayPin, LOW);                   // turn off relay - powers it all down
       }
     break;
   }
 
-  if (currentMillis - previousMillis >= interval) { // blink the LED
+  if (currentMillis - previousMillis >= interval) {  // blink the LED
     // save the last time the LED blinked
     previousMillis = currentMillis;
     ledState = !ledState;
