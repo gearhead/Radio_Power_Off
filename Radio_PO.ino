@@ -33,40 +33,39 @@
  */
  
 // code to turn off radio when door is opened or after 15 min
-#define ignPin 0   // igniton on = HIGH waiting for LOW
-#define ledPin 1   // on board led high to turn on
-#define doorPin 2  // HIGH waiting for LOW
-#define relayPin 4 // output to relay HIGH to turn on
+#define ignPin 0                                    // igniton on = HIGH waiting for LOW
+#define ledPin 1                                    // on board led high to turn on
+#define doorPin 2                                   // HIGH waiting for LOW
+#define relayPin 4                                  // output to relay HIGH to turn on
 
-const unsigned long debounce = 100;  // ms debounce on interrupt pins
+const unsigned long debounce = 100;                 // ms debounce on interrupt pins
 
 unsigned long currentMillis;
 unsigned long previousMillis;
-unsigned long interval = 1000;    // how often to flash led
-unsigned long offDelay = 898000; // 900000 is 15 min, this is 15 seconds short
-unsigned long offTime;           // calculated time 15 min after power off
-bool ledState = LOW;             // start blink off
+unsigned long interval = 1000;                      // how often to flash led
+unsigned long offDelay = 898000;                    // 900000 is 15 min, this is 15 seconds short
+unsigned long offTime;                              // calculated time 15 min after power off
+bool ledState = LOW;                                // start blink off
 bool shutDown = LOW;
 int powerState = 0;
-volatile bool intSignal = HIGH;  // powered up and waiting for a turn off - LOW
+volatile bool intSignal = HIGH;                      // powered up and waiting for a turn off - LOW
 // interrupt debounce vars
 volatile unsigned long last_interrupt_time;
 volatile unsigned long interrupt_time;
 
 void setup() { 
   // initialize the pins
-  pinMode(ignPin, INPUT);  // high when running (15) - this needs a pull down
-  pinMode(doorPin,INPUT);  // high when running - needs pull down/
+  pinMode(ignPin, INPUT);                            // high when running (15) - needs a pull down
+  pinMode(doorPin,INPUT);                            // high when running - needs pull up
   // do not read door Pin as door may be open then closed as car is started assume HIGH
-  pinMode(relayPin, OUTPUT); // LOW to turn on relay
-  digitalWrite(relayPin, HIGH);  // turn on relay at power up
-  pinMode(ledPin, OUTPUT); //LED on DigiSpark board, HIGH to turn on
+  pinMode(relayPin, OUTPUT);                         // HIGH to turn on relay
+  digitalWrite(relayPin, HIGH);                      // turn on relay at power up
+  pinMode(ledPin, OUTPUT);                           //LED on DigiSpark board, HIGH to turn on
   // set up PCINT
   cli();
   // set PCINT0_vect to be triggered by the ignition pin first 
-  GIMSK = 0b00100000;    // turns on pin change interrupts: generic look for a change on all pins
-  //PCMSK |= (1 << ignPin); // check this with a digitalRead
-  PCMSK = 0b00000101;  // pins 0 and 2
+  GIMSK = 0b00100000;                                // turns on pin change interrupts
+  PCMSK = 0b00000101;                                // look for change on pins 0 and 2
   sei();
 }
 
@@ -128,7 +127,7 @@ ISR(PCINT0_vect) {
   interrupt_time = currentMillis;
   // If interrupts come faster than debounce ms, assume it's a bounce and ignore
   if (interrupt_time - last_interrupt_time > debounce) {
-    intSignal = LOW; // interrupt pin changes state - LOW
+    intSignal = LOW;                                 // interrupt pin changes state - LOW
   }
   last_interrupt_time = interrupt_time;
 }
