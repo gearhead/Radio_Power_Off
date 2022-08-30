@@ -93,7 +93,7 @@ void loop() {
         if(!digitalRead(doorPin)) {                  // we got a door pin gnd
           powerState = 2;                            // get ready to turn off
           interval = interval >> 1;                  // blink even faster
-          offTime = currentMillis + 2000;            // turn it off in 5 seconds
+          offTime = currentMillis + 2000;            // turn it off in 2 seconds
         }
       intSignal = HIGH;                              // reset in case state 0
       break;
@@ -101,7 +101,7 @@ void loop() {
       if (currentMillis >= offTime) {                // timer expired
           interval = interval >> 1;                  // blink even faster
           powerState = 2;
-          offTime = currentMillis + 2000;    
+          offTime = currentMillis + 2000;            // turn it off in 2 seconds
           //turn it off in 5 seconds
           break;
       }
