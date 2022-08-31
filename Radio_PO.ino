@@ -10,7 +10,7 @@
  * led on pin 1
  * 200 resistor and 5.6v zener on door and run pins
  * 1n4001 from +15 to radio lead
- * 100k lullup on door pin, 100k pulldown on ign pin
+ * 100k pullup on door pin, 100k pulldown on ign pin
  * 2n2222 to turn on relay (switched polarity on pin 1)
  * red +30, yellow +15, blue radio, black gnd 
  * pins 3 and 4 are used for USB and have 3v6 zeners and resistors so their thresholds are
@@ -43,29 +43,30 @@ const unsigned long debounce = 100;                 // ms debounce on interrupt 
 unsigned long currentMillis;
 unsigned long previousMillis;
 unsigned long interval = 1000;                      // how often to flash led
-unsigned long offDelay = 898000;                    // 900000 is 15 min, this is 15 seconds short
+unsigned long offDelay = 900000;                    // 900000 is 15 min, this is 15 seconds short
+unsigned long door_offDelay = 1000;                 // time after door open to turn off
 unsigned long offTime;                              // calculated time 15 min after power off
 bool ledState = LOW;                                // start blink off
 bool shutDown = LOW;
 int powerState = 0;
-volatile bool intSignal = HIGH;                      // powered up and waiting for a turn off - LOW
+volatile bool intSignal = HIGH;                     // powered up and waiting for a turn off - LOW
 // interrupt debounce vars
 volatile unsigned long last_interrupt_time;
 volatile unsigned long interrupt_time;
 
 void setup() { 
   // initialize the pins
-  pinMode(ignPin, INPUT);                            // high when running (15) - needs a pull down
-  pinMode(doorPin,INPUT);                            // high when running - needs pull up
+  pinMode(ignPin, INPUT);                           // high when running (15) - this needs a pull down
+  pinMode(doorPin,INPUT);                           // high when running - needs pull up
   // do not read door Pin as door may be open then closed as car is started assume HIGH
-  pinMode(relayPin, OUTPUT);                         // HIGH to turn on relay
-  digitalWrite(relayPin, HIGH);                      // turn on relay at power up
-  pinMode(ledPin, OUTPUT);                           //LED on DigiSpark board, HIGH to turn on
+  pinMode(relayPin, OUTPUT);                        // LOW to turn on relay
+  digitalWrite(relayPin, HIGH);                     // turn on relay at power up
+  pinMode(ledPin, OUTPUT);                          //LED on DigiSpark board, HIGH to turn on
   // set up PCINT
   cli();
   // set PCINT0_vect to be triggered by the ignition pin first 
-  GIMSK = 0b00100000;                                // turns on pin change interrupts
-  PCMSK = 0b00000101;                                // look for change on pins 0 and 2
+  GIMSK = 0b00100000;                               // turns on pin change interrupts
+  PCMSK = 0b00000101;                               // look for change on pins 0 and 2
   sei();
 }
 
@@ -76,11 +77,11 @@ void loop() {
       if (!intSignal) {
         if (!digitalRead(ignPin)) {                  //  turned ign off. wait for door
         // start timer
-        offTime = currentMillis + offDelay;          // set turn off time
+        offTime = currentMillis + offDelay - door_offDelay;
         interval = interval >> 1;                    // blink led faster after ign off
         powerState = 1;
-        intSignal = HIGH;
         }
+        intSignal = HIGH;
       }  
     break;
     case 1: // ign off. Check for timer or door or ign back on
@@ -88,22 +89,21 @@ void loop() {
         if(digitalRead(ignPin)) {                    // turned ign back on
           powerState = 0;                            // reset to state 0
           interval = interval << 1;
+          intSignal = HIGH;                          // reset interrupt var
           break;
         }
         if(!digitalRead(doorPin)) {                  // we got a door pin gnd
           powerState = 2;                            // get ready to turn off
           interval = interval >> 1;                  // blink even faster
-          offTime = currentMillis + 2000;            // turn it off in 2 seconds
+          offTime = currentMillis + door_offDelay;   // turn it off in x seconds
+          intSignal = HIGH;                          // reset interrupt var
+          break;
         }
-      intSignal = HIGH;                              // reset in case state 0
-      break;
       }
       if (currentMillis >= offTime) {                // timer expired
           interval = interval >> 1;                  // blink even faster
-          powerState = 2;
-          offTime = currentMillis + 2000;            // turn it off in 2 seconds
-          //turn it off in 5 seconds
-          break;
+          powerState = 2;                            // get ready to turn off
+          offTime = currentMillis + door_offDelay;   //turn it off in x second
       }
     break;
     case 2:                                          // Power down
@@ -127,7 +127,7 @@ ISR(PCINT0_vect) {
   interrupt_time = currentMillis;
   // If interrupts come faster than debounce ms, assume it's a bounce and ignore
   if (interrupt_time - last_interrupt_time > debounce) {
-    intSignal = LOW;                                 // interrupt pin changes state - LOW
+    intSignal = LOW; // interrupt pin changes state - LOW
   }
   last_interrupt_time = interrupt_time;
 }
