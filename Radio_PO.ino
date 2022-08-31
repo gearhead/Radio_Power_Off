@@ -43,7 +43,7 @@ const unsigned long debounce = 100;                 // ms debounce on interrupt 
 unsigned long currentMillis;
 unsigned long previousMillis;
 unsigned long interval = 1000;                      // how often to flash led
-unsigned long offDelay = 900000;                    // 900000 is 15 min, this is 15 seconds short
+unsigned long offDelay = 900000;                    // 900000 is 15 min
 unsigned long door_offDelay = 1000;                 // time after door open to turn off
 unsigned long offTime;                              // calculated time 15 min after power off
 bool ledState = LOW;                                // start blink off
