@@ -47,7 +47,6 @@ unsigned long offDelay = 900000;                    // 900000 is 15 min, this is
 unsigned long door_offDelay = 1000;                 // time after door open to turn off
 unsigned long offTime;                              // calculated time 15 min after power off
 bool ledState = LOW;                                // start blink off
-bool shutDown = LOW;
 int powerState = 0;
 volatile bool intSignal = HIGH;                     // powered up and waiting for a turn off - LOW
 // interrupt debounce vars
